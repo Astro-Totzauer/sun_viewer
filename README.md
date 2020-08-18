@@ -9,7 +9,7 @@ At the moment its functionality is limited to displaying images generated from u
 Goals for the project:
   
   * Create a contextual slider with values dependent on the selected stretch function (specifies the "a" value in astropy's log stretch function, for       example)
-  * Expand the stretch function list to include more potentially relevant options.
+  * Expand the stretch function list
   * Add noise reduction options (Savitzky-Golay, gaussians, etc)
   * Add ability to export to new fits files
   * Allow for side-by-side views of data sets to compare original and altered images
