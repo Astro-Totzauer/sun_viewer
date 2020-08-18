@@ -7,12 +7,13 @@ from matplotlib.backends.backend_qt5agg import (
     FigureCanvasQTAgg as FigureCanvas, 
     NavigationToolbar2QT as NavigationToolbar)
 import sys
-from PyQt5 import QtGui, QtWidgets
+from PyQt5 import QtGui, QtWidgets, QtCore
+import savitzkygolay
 import numpy as np
 from pathlib import Path
 from astropy.io import fits
 from astropy.visualization import ContrastBiasStretch,ManualInterval,LinearStretch,MinMaxInterval,ImageNormalize, SqrtStretch,LogStretch,PowerDistStretch,PowerStretch,SinhStretch,SquaredStretch,AsinhStretch,PercentileInterval
-
+from scipy.signal import savgol_filter, medfilt
 # Connects the Qt UI file with this python file
 Ui_MainWindow, QMainWindow = loadUiType('window.ui')
 
@@ -21,7 +22,7 @@ class Main(QMainWindow, Ui_MainWindow):
     def __init__(self, ):
         super(Main, self).__init__()
         self.setupUi(self)
-        self.comboBox.addItems(['Sqrt Stretch', 'Linear Stretch', 'Squared Stretch', 'Power Stretch', 'Log Stretch'])
+        self.comboBox.addItems(['No Stretch', 'Sqrt Stretch', 'Linear Stretch', 'Squared Stretch', 'Power Stretch', 'Log Stretch'])
         self.openButton.clicked.connect(self.selectFile)
         self.comboBox.activated[str].connect(self.norm_set)
         self.var_min = 0
@@ -31,10 +32,24 @@ class Main(QMainWindow, Ui_MainWindow):
         self.varSlider.setMaximum(self.var_max)
         self.varSlider.setTickInterval(self.var_int)
         self.varSlider.valueChanged.connect(self.setSliderValue)
+        self.rbtn1.toggled.connect(self.noise_reduction_select)
+        self.rbtn2.toggled.connect(self.noise_reduction_select)
+        self.rbtn3.toggled.connect(self.noise_reduction_select)
+        self.sgwintxt.returnPressed.connect(self.set_sg_window)
+        self.sgdegtxt.returnPressed.connect(self.set_sg_degree)
+        self.rdiffCheck.stateChanged.connect(self.run_diff)
+        #self.setSGWindow.returnPressed.connect(self.set_sg_window)
+        #self.setSGDeg.clicked.connect(self.set_sg_degree)
         self.i = 0
         self.a = 1
-        self.norm = ImageNormalize(interval=MinMaxInterval())
+        self.norm = None
         self.dates = []
+        self.sg_window = 5
+        self.sg_degree = 3
+        self.fig1 = Figure()
+        self.canvas = FigureCanvas(self.fig1)
+        self.mplvl.addWidget(self.canvas)
+        self.axf1 = self.canvas.figure.subplots(ncols=1,nrows=1)
 
 # Function initiated by any key press event
     def keyPressEvent(self, event):
@@ -42,6 +57,13 @@ class Main(QMainWindow, Ui_MainWindow):
             self.prev()
         elif event.key() == Qt.Key_Right:
             self.next()
+
+    def mousePressEvent(self, event):
+        focused_widget = QtWidgets.QApplication.focusWidget()
+        if isinstance(focused_widget, QtWidgets.QLineEdit):
+            focused_widget.clearFocus()
+        
+
 # Contextual slider behavior, for stretch functions
     def setSliderValue(self):
         self.a = self.varSlider.value()
@@ -49,33 +71,67 @@ class Main(QMainWindow, Ui_MainWindow):
         self.create_image(self.cube)
         self.addmpl(self.fig1)
 
+    def run_diff(self, state):
+        if state == Qt.Checked:
+            self.i = 0
+            self.cube = np.diff(self.cube, axis=2)
+            self.n = self.cube.shape[2]
+            self.create_image(self.cube)
+        else:
+            self.cube = self.cube_base
+            self.n = self.cube.shape[2]
+            self.create_image(self.cube)
+
+    def set_sg_window(self):
+        self.sg_window = int(self.sgwintxt.text())
+        main.savitzky_golay(self.sg_window, self.sg_degree)
+        self.sgwintxt.clearFocus()
+
+    def set_sg_degree(self):
+        self.sg_degree = int(self.sgdegtxt.text())
+        main.savitzky_golay(self.sg_window, self.sg_degree)
+        self.sgdegtxt.clearFocus()
+
+    def noise_reduction_select(self):
+        radioBtn = self.sender()
+        if radioBtn.isChecked():
+            if radioBtn.text() == 'Savitzky-Golay':
+                main.savitzky_golay(self.sg_window, self.sg_degree)
+            elif radioBtn.text() == 'Median':
+                main.median_filter()
+            elif radioBtn.text() == 'None':
+                main.no_filter()
+
+
+    def savitzky_golay(self, x, y):
+        self.cube = savitzkygolay.filter3D(self.cube_base, self.sg_window, self.sg_degree)
+        main.create_image(self.cube)
+
+    def median_filter(self):
+        self.cube = medfilt(self.cube_base)
+        main.create_image(self.cube)
+
+    def no_filter(self):
+        self.cube = self.cube_base
+        main.create_image(self.cube)
+
 # Resets the normalization parameters when the stretch option changes
 # This needs work - need to add more stretch options and improve parameters for each
     def norm_set(self, text):
-        stretch_dict = {'Sqrt Stretch':SqrtStretch(), 'Linear Stretch':LinearStretch(), 'Squared Stretch':SquaredStretch(), 'Power Stretch':PowerStretch(self.a), 'Log Stretch':LogStretch(self.a)}
+        stretch_dict = {'No Stretch': None, 'Sqrt Stretch':SqrtStretch(), 'Linear Stretch':LinearStretch(), 'Squared Stretch':SquaredStretch(), 'Power Stretch':PowerStretch(self.a), 'Log Stretch':LogStretch(self.a)}
         self.stretch_val = stretch_dict[text]
         if text == 'Log Stretch':
             self.var_max = 10000
             self.var_int = 10
+            self.norm = ImageNormalize(interval=MinMaxInterval(), stretch=self.stretch_val)
+        elif text == 'No Stretch':
+            self.norm = None
         else:
             self.var_max = 10
             self.var_int = 1
-        self.norm = ImageNormalize(interval=MinMaxInterval(),stretch=self.stretch_val)
+            self.norm = ImageNormalize(interval=MinMaxInterval(),stretch=self.stretch_val)
         main.create_image(self.cube)
-        main.rmmpl()
-        main.addmpl(self.fig1)
 
-# Adds the Qt widget necessary for displaying the matplotlib image
-# mplvl is the layout object in Qt
-    def addmpl(self, fig):
-        self.canvas = FigureCanvas(fig)
-        self.mplvl.addWidget(self.canvas)
-        self.canvas.draw()
-
-# Removes the Qt display widget, used before a new image is displayed
-    def rmmpl(self,):
-        self.mplvl.removeWidget(self.canvas)
-        self.canvas.close()
 
 # Displays previous image, prevents errors at boundaries of image set
     def prev(self):
@@ -83,9 +139,7 @@ class Main(QMainWindow, Ui_MainWindow):
             self.i = 0
         else:
             self.i = self.i - 1
-        main.rmmpl()
         main.create_image(self.cube)
-        main.addmpl(self.fig1)
 
 # Displays next image in set. Can be used with key event or button.
     def next(self):
@@ -93,9 +147,7 @@ class Main(QMainWindow, Ui_MainWindow):
             self.i = self.n - 1
         else:
             self.i = self.i + 1
-        main.rmmpl()
         main.create_image(self.cube)
-        main.addmpl(self.fig1)
 
 # Creates a 3-d ndarray from list of files and creates a
 # list of fits headers
@@ -112,15 +164,16 @@ class Main(QMainWindow, Ui_MainWindow):
             self.dates.append(date_obs)
         return dataz
 
+
 # Creates individual image to be displayed and generates
 # accompanying date from header
     def create_image(self,cube):
         date = self.dates[self.i]
         self.image = np.flip(cube[:,:,self.i],axis=0)
-        self.fig1 = Figure()
-        self.axf1 = self.fig1.add_subplot(111)
         self.axf1.set_title(date)
-        self.axf1.imshow(self.image, norm = self.norm, cmap='gray')
+        self.view_image.set_data(self.image)
+        self.view_image.set_norm(self.norm)
+        self.fig1.canvas.draw_idle()
 
 # Connected with Open button, creates interactive dialog box for user to select
 # files to be given to the make_cube function
@@ -129,12 +182,12 @@ class Main(QMainWindow, Ui_MainWindow):
         files, filter = QtWidgets.QFileDialog.getOpenFileNames(self, "Open Files", " ", "Fits files (*.fits)")
         files = sorted(files)
         self.cube = main.make_cube(files)
+        self.cube_base = self.cube
         self.n = self.cube.shape[2]
+        self.i = 0
         self.image = np.flip(self.cube[:,:,0],axis=0)
-        self.fig1 = Figure()
-        self.axf1 = self.fig1.add_subplot(111)
-        self.axf1.imshow(self.image, cmap='gray')
-        main.addmpl(self.fig1)
+        self.view_image = self.axf1.imshow(self.image, cmap='gray')
+        self.fig1.canvas.draw_idle()
     
 # Initializes this application when python file is run
 if __name__ == '__main__':
