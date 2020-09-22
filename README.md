@@ -16,3 +16,7 @@ Goals for the project:
   * Incorporate coordinates from fits headers and add options for conversion between systems
   * Add tools for measuring features in images with mouse clicks
   * Add ability to create time-height plots
+
+Installation:
+
+At some point this will be packaged into an installer for multiple platforms, but for now you can download the ui and python files, make sure they're in the same location and run the python file. 
