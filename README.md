@@ -20,3 +20,7 @@ Goals for the project:
 Installation:
 
 At some point this will be packaged into an installer for multiple platforms, but for now you can download the ui and python files, make sure they're in the same location and run the python file. 
+
+Currently, this project is using the PyQt5, Astropy, Numpy, Scipy and Matplotlib python libraries. One of its noise reduction tools also uses Marcus Hughes' Savitzky-Golay filter which can be found here: https://github.com/jmbhughes/savitzkygolay
+
+
