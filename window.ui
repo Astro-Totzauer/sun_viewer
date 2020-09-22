@@ -55,7 +55,7 @@ SegmentStyle: Flat;
      </rect>
     </property>
     <property name="currentIndex">
-     <number>1</number>
+     <number>2</number>
     </property>
     <widget class="QWidget" name="tab">
      <attribute name="title">
@@ -360,8 +360,73 @@ SegmentStyle: Flat;
     </widget>
     <widget class="QWidget" name="tab_3">
      <attribute name="title">
-      <string>Export</string>
+      <string>Tab 3</string>
      </attribute>
+     <widget class="QCheckBox" name="coordscheckBox">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>30</y>
+        <width>111</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Select Coords</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="clearcoordsButton">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>110</y>
+        <width>113</width>
+        <height>32</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Clear Coords</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="printcoordsButton">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>60</y>
+        <width>113</width>
+        <height>32</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Print Coords</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="zoomcheckBox">
+      <property name="geometry">
+       <rect>
+        <x>170</x>
+        <y>30</y>
+        <width>87</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Zoom</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="undozoomButton">
+      <property name="geometry">
+       <rect>
+        <x>170</x>
+        <y>60</y>
+        <width>113</width>
+        <height>32</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Undo</string>
+      </property>
+     </widget>
     </widget>
    </widget>
    <widget class="QLCDNumber" name="lcdX">
@@ -460,6 +525,19 @@ background-color: rgb(0, 0, 0)
     </property>
     <property name="text">
      <string>Max</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="restartButton">
+    <property name="geometry">
+     <rect>
+      <x>630</x>
+      <y>500</y>
+      <width>113</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Restart</string>
     </property>
    </widget>
   </widget>

@@ -1,6 +1,7 @@
 from PyQt5.Qt import Qt
 from PyQt5.uic import loadUiType
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtGui import QPixmap, QImage
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure 
 from matplotlib.backends.backend_qt5agg import (
@@ -25,7 +26,9 @@ class Main(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.comboBox.addItems(['No Stretch', 'Sqrt Stretch', 'Linear Stretch', 'Squared Stretch', 'Power Stretch', 'Log Stretch'])
         self.openButton.clicked.connect(self.selectFile)
+        self.restartButton.clicked.connect(self.restart)
         self.comboBox.activated[str].connect(self.norm_set)
+        self.printcoordsButton.clicked.connect(self.print_coords)
         self.var_min = 0
         self.var_max = 1
         self.var_int = 1
@@ -48,6 +51,10 @@ class Main(QMainWindow, Ui_MainWindow):
         self.rbtn8.toggled.connect(self.interval_select)
         self.rbtn9.toggled.connect(self.interval_select)
         self.rbtn4.toggled.connect(self.cube_mean)
+        self.zoomcheckBox.stateChanged.connect(self.zoom_state)
+        self.undozoomButton.clicked.connect(self.undo_zoom)
+        self.coordscheckBox.stateChanged.connect(self.coords_list)
+        self.clearcoordsButton.clicked.connect(self.clear_coords)
         self.meantxt.returnPressed.connect(self.set_mean_window)
         self.sgwintxt.returnPressed.connect(self.set_sg_window)
         self.sgdegtxt.returnPressed.connect(self.set_sg_degree)
@@ -67,6 +74,10 @@ class Main(QMainWindow, Ui_MainWindow):
         self.norm = None
         self.interval = None
         self.dates = []
+        self.coords = []
+        self.zoom_coords = []
+        self.save_coords = False
+        self.set_zoom_coords = False
         self.sg_window = 5
         self.sg_degree = 3
         self.fig1 = Figure()
@@ -87,42 +98,62 @@ class Main(QMainWindow, Ui_MainWindow):
         if isinstance(focused_widget, QtWidgets.QLineEdit):
             focused_widget.clearFocus()
         
+    def coords_list(self, checked):
+        if checked:
+            self.save_coords = True
+        else:
+            self.save_coords = False
+
+    def print_coords(self):
+        QMessageBox.about(self, 'Title',str(self.coords))
+
+    def clear_coords(self):
+        self.coords = []
+
     def set_percent(self):
-        self.percent = int(self.percenttxt.text())
-        main.percent_int
+        self.percent = float(self.percenttxt.text())
+        main.percent_int()
         
     def percent_int(self):
         self.interval = PercentileInterval(self.percent)
         self.refresh_norm()
-    
+        print('Percent = ' + str(self.percent))
+
     def set_vmin(self):
-        self.v_min = self.vmintxt.text()
+        self.v_min = float(self.vmintxt.text())
         main.manual_int()
     
     def set_vmax(self):
-        self.v_max = self.vmaxtxt.text()
+        self.v_max = float(self.vmaxtxt.text())
         main.manual_int()
 
     def manual_int(self):
         self.interval = ManualInterval(self.v_min, self.v_max)
         main.refresh_norm()
+        print('v_min, v_max = ' + str(self.v_min) + ', ' +  str(self.v_max))
 
     def set_percent_low(self):
-        self.percent_low = self.percentlowtxt.text()
-        main.refresh_norm()
+        self.percent_low = float(self.percentlowtxt.text())
+        main.asym_int()
 
     def set_percent_high(self):
-        self.percent_high = self.percenthightxt.text()
+        self.percent_high = float(self.percenthightxt.text())
         main.asym_int()
 
     def asym_int(self):
         self.interval = AsymmetricPercentileInterval(self.percent_low, self.percent_high)
         main.refresh_norm()
-        print(self.percent_low, self.percent_high)
+        print('Percentages = ' + str(self.percent_low) +', ' + str(self.percent_high))
 
     def refresh_norm(self):
-        self.norm = ImageNormalize(interval=self.interval, stretch=self.stretch_val, clip=True)
+        #if self.stretch_val == None:
+            #self.norm = None
+        #else:
+            #self.norm = ImageNormalize(stretch=self.stretch_val, clip=True)
+        self.cube = self.interval(self.cube_base)
         main.create_image(self.cube)
+        print(self.interval)
+        print(self.stretch_val)
 
 # Contextual slider behavior, for stretch functions
     def setSliderValue(self):
@@ -238,6 +269,7 @@ class Main(QMainWindow, Ui_MainWindow):
             self.norm = ImageNormalize(interval=self.interval, stretch=self.stretch_val, clip=True)
         elif text == 'No Stretch':
             self.norm = None
+            self.stretch_val = None
         else:
             self.var_max = 10
             self.var_int = 1
@@ -263,6 +295,12 @@ class Main(QMainWindow, Ui_MainWindow):
     def figure_coords(self,event):
         self.ix = event.xdata
         self.iy = event.ydata
+        if self.save_coords == True:
+            self.coords.append([self.ix,self.iy])
+        elif self.set_zoom_coords == True:
+            self.zoom_coords.append([round(self.ix),round(self.iy)])
+            if len(self.zoom_coords) == 2:
+                main.zoom()
         self.lcdX.display(self.ix)
         self.lcdY.display(self.iy)
 
@@ -281,6 +319,24 @@ class Main(QMainWindow, Ui_MainWindow):
             self.dates.append(date_obs)
         return dataz
 
+    def zoom(self):
+        self.backup_cube = self.cube
+        x1,x2 = self.zoom_coords[0][0], self.zoom_coords[1][0]
+        y1,y2 = self.zoom_coords[0][1], self.zoom_coords[1][1]
+        self.cube = self.cube[y2:y1,x1:x2,:]
+        main.create_image(self.cube)
+        
+    def undo_zoom(self):
+        self.cube = self.backup_cube
+        self.zoom_coords = []
+        main.create_image(self.cube)
+
+    def zoom_state(self, checked):
+        if checked:
+            self.set_zoom_coords = True
+        else:
+            self.set_zoom_coords = False
+
 
 # Creates individual image to be displayed and generates
 # accompanying date from header
@@ -295,6 +351,13 @@ class Main(QMainWindow, Ui_MainWindow):
         self.fig1.canvas.draw_idle()
         self.lcdMin.display(imageMin)
         self.lcdMax.display(imageMax)
+
+    def restart(self):
+        self.cube = self.cube_base
+        self.norm = None
+        self.interval = None
+        self.i = 0
+        main.create_image(self.cube)
 
 # Connected with Open button, creates interactive dialog box for user to select
 # files to be given to the make_cube function
