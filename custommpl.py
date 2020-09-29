@@ -1,6 +1,6 @@
 from PyQt5.Qt import Qt
 from PyQt5.uic import loadUiType
-from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMessageBox, QButtonGroup
 from PyQt5.QtGui import QPixmap, QImage
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure 
@@ -13,6 +13,7 @@ import savitzkygolay
 import numpy as np
 from pathlib import Path
 from astropy.io import fits
+from astropy.nddata import Cutout2D
 from astropy.visualization import ContrastBiasStretch,ManualInterval,LinearStretch,MinMaxInterval,ImageNormalize, SqrtStretch,LogStretch,PowerDistStretch,PowerStretch,SinhStretch,SquaredStretch,AsinhStretch,PercentileInterval,AsymmetricPercentileInterval,ZScaleInterval, BaseStretch
 from astropy.wcs import WCS
 from scipy.signal import savgol_filter, medfilt
@@ -24,6 +25,8 @@ class Main(QMainWindow, Ui_MainWindow):
     def __init__(self, ):
         super(Main, self).__init__()
         self.setupUi(self)
+        self.group = QButtonGroup()
+        self.group.setExclusive(False)
         self.comboBox.addItems(['No Stretch', 'Sqrt Stretch', 'Linear Stretch', 'Squared Stretch', 'Power Stretch', 'Log Stretch'])
         self.openButton.clicked.connect(self.selectFile)
         self.restartButton.clicked.connect(self.restart)
@@ -51,6 +54,12 @@ class Main(QMainWindow, Ui_MainWindow):
         self.rbtn8.toggled.connect(self.interval_select)
         self.rbtn9.toggled.connect(self.interval_select)
         self.rbtn4.toggled.connect(self.cube_mean)
+        self.group.addButton(self.rbtn5)
+        self.group.addButton(self.rbtn6)
+        self.group.addButton(self.rbtn7)
+        self.group.addButton(self.rbtn8)
+        self.group.addButton(self.rbtn9)
+        self.gridBox.stateChanged.connect(self.grid_lines)
         self.zoomcheckBox.stateChanged.connect(self.zoom_state)
         self.undozoomButton.clicked.connect(self.undo_zoom)
         self.coordscheckBox.stateChanged.connect(self.coords_list)
@@ -116,6 +125,11 @@ class Main(QMainWindow, Ui_MainWindow):
         
     def percent_int(self):
         self.interval = PercentileInterval(self.percent)
+        self.rbtn5.setChecked(False)
+        self.rbtn6.setChecked(False)
+        self.rbtn7.setChecked(True)
+        self.rbtn8.setChecked(False)
+        self.rbtn9.setChecked(False)
         self.refresh_norm()
         print('Percent = ' + str(self.percent))
 
@@ -129,6 +143,11 @@ class Main(QMainWindow, Ui_MainWindow):
 
     def manual_int(self):
         self.interval = ManualInterval(self.v_min, self.v_max)
+        self.rbtn5.setChecked(True)
+        self.rbtn6.setChecked(False)
+        self.rbtn7.setChecked(False)
+        self.rbtn8.setChecked(False)
+        self.rbtn9.setChecked(False)
         main.refresh_norm()
         print('v_min, v_max = ' + str(self.v_min) + ', ' +  str(self.v_max))
 
@@ -142,6 +161,11 @@ class Main(QMainWindow, Ui_MainWindow):
 
     def asym_int(self):
         self.interval = AsymmetricPercentileInterval(self.percent_low, self.percent_high)
+        self.rbtn5.setChecked(False)
+        self.rbtn6.setChecked(False)
+        self.rbtn7.setChecked(False)
+        self.rbtn8.setChecked(True)
+        self.rbtn9.setChecked(False)
         main.refresh_norm()
         print('Percentages = ' + str(self.percent_low) +', ' + str(self.percent_high))
 
@@ -150,7 +174,7 @@ class Main(QMainWindow, Ui_MainWindow):
             #self.norm = None
         #else:
             #self.norm = ImageNormalize(stretch=self.stretch_val, clip=True)
-        self.cube = self.interval(self.cube_base)
+        self.cube = self.interval(self.cube)
         main.create_image(self.cube)
         print(self.interval)
         print(self.stretch_val)
@@ -162,24 +186,32 @@ class Main(QMainWindow, Ui_MainWindow):
         self.create_image(self.cube)
         self.addmpl(self.fig1)
 
+    def grid_lines(self, state):
+        if state == Qt.Checked:
+            self.axf1.grid(b=True)
+        else:
+            self.axf1.grid(b=False)
+        main.create_image(self.cube)
+
     def run_diff(self, state):
         if state == Qt.Checked:
+            self.cube_nodiff = self.cube
             self.i = 0
             self.cube = np.diff(self.cube, axis=2)
             self.n = self.cube.shape[2]
             main.create_image(self.cube)
         else:
-            self.cube = self.cube_base
+            self.cube = self.cube_nodiff
             self.n = self.cube.shape[2]
             main.create_image(self.cube)
 
     def cube_div(self, state):
         if state == Qt.Checked:
-            self.cube = self.cube_base / self.cube
-            main.create_image(self.cube)
+            main.cube_mean(5)
+            self.cube = self.cube_base / (self.cube_mean1 + 0.03)
         else:
             self.cube = self.cube_base
-            main.create_image(self.cube)
+        main.create_image(self.cube)
 
     def set_sg_window(self):
         self.sg_window = int(self.sgwintxt.text())
@@ -211,6 +243,11 @@ class Main(QMainWindow, Ui_MainWindow):
         if radioBtn.isChecked():
             if radioBtn.text() == 'MinMax':
                 self.interval = MinMaxInterval()
+                self.rbtn5.setChecked(False)
+                self.rbtn6.setChecked(True)
+                self.rbtn7.setChecked(False)
+                self.rbtn8.setChecked(False)
+                self.rbtn9.setChecked(False)
                 main.refresh_norm()
             elif radioBtn.text() == 'Manual':
                 main.manual_int()
@@ -223,6 +260,11 @@ class Main(QMainWindow, Ui_MainWindow):
                 main.refresh_norm()
             elif radioBtn.text() == 'ZScale':
                 self.interval = ZScaleInterval()
+                self.rbtn5.setChecked(False)
+                self.rbtn6.setChecked(False)
+                self.rbtn7.setChecked(False)
+                self.rbtn8.setChecked(False)
+                self.rbtn9.setChecked(True)
                 main.refresh_norm()
 
      
@@ -255,8 +297,7 @@ class Main(QMainWindow, Ui_MainWindow):
             else:
                 window_means = np.mean(self.cube[:,:,int(i-window):int(i+window)],axis=2)
                 dataz[:,:,i] = window_means
-        self.cube = dataz
-        main.create_image(self.cube)
+        self.cube_mean1 = dataz
 
 # Resets the normalization parameters when the stretch option changes
 # This needs work - need to add more stretch options and improve parameters for each
@@ -266,14 +307,16 @@ class Main(QMainWindow, Ui_MainWindow):
         if text == 'Log Stretch':
             self.var_max = 10000
             self.var_int = 10
-            self.norm = ImageNormalize(interval=self.interval, stretch=self.stretch_val, clip=True)
+            self.cube = self.stretch_val(self.cube_base)
+            #self.norm = ImageNormalize(interval=self.interval, stretch=self.stretch_val, clip=True)
         elif text == 'No Stretch':
             self.norm = None
-            self.stretch_val = None
+            self.cube = self.cube_base
         else:
             self.var_max = 10
             self.var_int = 1
-            self.norm = ImageNormalize(interval=self.interval, stretch=self.stretch_val, clip=True)
+            self.cube = self.stretch_val(self.cube_base)
+            #self.norm = ImageNormalize(interval=self.interval, stretch=self.stretch_val, clip=True)
         main.create_image(self.cube)
 
 # Displays previous image, prevents errors at boundaries of image set
@@ -301,6 +344,8 @@ class Main(QMainWindow, Ui_MainWindow):
             self.zoom_coords.append([round(self.ix),round(self.iy)])
             if len(self.zoom_coords) == 2:
                 main.zoom()
+        pix_value = self.cube[round(self.iy),round(self.ix),self.i]
+        self.lcdVal.display(pix_value)
         self.lcdX.display(self.ix)
         self.lcdY.display(self.iy)
 
@@ -321,14 +366,25 @@ class Main(QMainWindow, Ui_MainWindow):
 
     def zoom(self):
         self.backup_cube = self.cube
+        self.hdu_backup = self.hdu
+        self.wcs_backup = self.wcs
         x1,x2 = self.zoom_coords[0][0], self.zoom_coords[1][0]
         y1,y2 = self.zoom_coords[0][1], self.zoom_coords[1][1]
         self.cube = self.cube[y2:y1,x1:x2,:]
+        #pos_x = abs(x2-x1)/2.0
+        #pos_y = abs(y2-y1)/2.0
+        #cutout = Cutout2D(self.cube, position = (pos_x,pos_y), size = (abs(x2-x1),abs(y2-y1)), wcs=self.wcs)
+        #self.hdu.header.update(cutout.wcs.to_header())
+        #self.wcs = WCS(self.hdu.header)
+        #self.axf1 = self.canvas.figure.subplots(ncols=1,nrows=1, subplot_kw={'projection': self.wcs})
         main.create_image(self.cube)
-        
+
     def undo_zoom(self):
         self.cube = self.backup_cube
         self.zoom_coords = []
+        #self.hdu = self.hdu_backup
+        #self.wcs = self.wcs_backup
+        #self.axf1 = self.canvas.figure.subplots(ncols=1,nrows=1, subplot_kw={'projection': self.wcs})
         main.create_image(self.cube)
 
     def zoom_state(self, checked):
@@ -357,6 +413,18 @@ class Main(QMainWindow, Ui_MainWindow):
         self.norm = None
         self.interval = None
         self.i = 0
+        self.rbtn5.setChecked(False)
+        self.rbtn6.setChecked(False)
+        self.rbtn7.setChecked(False)
+        self.rbtn8.setChecked(False)
+        self.rbtn9.setChecked(False)
+        self.rdiffCheck.setChecked(False)
+        self.comboBox.setCurrentText('No Stretch')
+        self.percenttxt.clear()
+        self.vmintxt.clear()
+        self.vmaxtxt.clear()
+        self.percentlowtxt.clear()
+        self.percenthightxt.clear()
         main.create_image(self.cube)
 
 # Connected with Open button, creates interactive dialog box for user to select
@@ -365,10 +433,9 @@ class Main(QMainWindow, Ui_MainWindow):
         home_dir = str(Path.home())
         files, filter = QtWidgets.QFileDialog.getOpenFileNames(self, "Open Files", " ", "Fits files (*.fits)")
         self.files = sorted(files)
-        hdu = fits.open(self.files[0])[0]
-        self.wcs = WCS(hdu.header)
+        self.hdu = fits.open(self.files[0])[0]
+        self.wcs = WCS(self.hdu.header)
         self.axf1 = self.canvas.figure.subplots(ncols=1,nrows=1, subplot_kw={'projection': self.wcs})
-        self.axf1.grid()
         self.cube = main.make_cube(self.files)
         self.cube_base = self.cube
         self.n = self.cube.shape[2]
