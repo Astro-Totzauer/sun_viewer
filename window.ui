@@ -48,14 +48,14 @@ SegmentStyle: Flat;
    <widget class="QTabWidget" name="tabWidget">
     <property name="geometry">
      <rect>
-      <x>600</x>
+      <x>630</x>
       <y>50</y>
       <width>361</width>
       <height>431</height>
      </rect>
     </property>
     <property name="currentIndex">
-     <number>1</number>
+     <number>3</number>
     </property>
     <widget class="QWidget" name="tab">
      <attribute name="title">
@@ -425,6 +425,129 @@ SegmentStyle: Flat;
       </property>
       <property name="text">
        <string>Undo</string>
+      </property>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="msgn_tab">
+     <attribute name="title">
+      <string>MSGN</string>
+     </attribute>
+     <widget class="QLineEdit" name="msgn_k_text">
+      <property name="geometry">
+       <rect>
+        <x>100</x>
+        <y>20</y>
+        <width>113</width>
+        <height>21</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QLabel" name="msgn_k_label">
+      <property name="geometry">
+       <rect>
+        <x>30</x>
+        <y>20</y>
+        <width>60</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>K-Value</string>
+      </property>
+     </widget>
+     <widget class="QLineEdit" name="msgn_gamma_text">
+      <property name="geometry">
+       <rect>
+        <x>100</x>
+        <y>50</y>
+        <width>113</width>
+        <height>21</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QLabel" name="msgn_gamma_label">
+      <property name="geometry">
+       <rect>
+        <x>30</x>
+        <y>50</y>
+        <width>60</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Gamma</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="msgn_g_label">
+      <property name="geometry">
+       <rect>
+        <x>30</x>
+        <y>80</y>
+        <width>60</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>g-value</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="msgn_h_label">
+      <property name="geometry">
+       <rect>
+        <x>30</x>
+        <y>110</y>
+        <width>60</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>h-value</string>
+      </property>
+     </widget>
+     <widget class="QLineEdit" name="msgn_g_text">
+      <property name="geometry">
+       <rect>
+        <x>100</x>
+        <y>80</y>
+        <width>113</width>
+        <height>21</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QLineEdit" name="msgn_h_text">
+      <property name="geometry">
+       <rect>
+        <x>100</x>
+        <y>110</y>
+        <width>113</width>
+        <height>21</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="msgn_single_imageButton">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>160</y>
+        <width>113</width>
+        <height>32</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Single Image</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="msgn_image_setButton">
+      <property name="geometry">
+       <rect>
+        <x>140</x>
+        <y>160</y>
+        <width>113</width>
+        <height>32</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Image Set</string>
       </property>
      </widget>
     </widget>

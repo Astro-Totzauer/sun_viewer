@@ -16,6 +16,8 @@ from astropy.io import fits
 from astropy.nddata import Cutout2D
 from astropy.visualization import ContrastBiasStretch,ManualInterval,LinearStretch,MinMaxInterval,ImageNormalize, SqrtStretch,LogStretch,PowerDistStretch,PowerStretch,SinhStretch,SquaredStretch,AsinhStretch,PercentileInterval,AsymmetricPercentileInterval,ZScaleInterval, BaseStretch
 from astropy.wcs import WCS
+import scipy.ndimage
+from scipy import signal
 from scipy.signal import savgol_filter, medfilt
 # Connects the Qt UI file with this python file
 Ui_MainWindow, QMainWindow = loadUiType('window.ui')
@@ -74,8 +76,18 @@ class Main(QMainWindow, Ui_MainWindow):
         self.percenttxt.returnPressed.connect(self.set_percent)
         self.percentlowtxt.returnPressed.connect(self.set_percent_low)
         self.percenthightxt.returnPressed.connect(self.set_percent_high)
+        self.msgn_k_text.returnPressed.connect(self.set_msgn_k)
+        self.msgn_gamma_text.returnPressed.connect(self.set_msgn_gamma)
+        self.msgn_g_text.returnPressed.connect(self.set_msgn_g)
+        self.msgn_h_text.returnPressed.connect(self.set_msgn_h)
+        self.msgn_single_imageButton.clicked.connect(self.msgn_single_image)
+        self.msgn_image_setButton.clicked.connect(self.msgn_image_set)
         #self.setSGWindow.returnPressed.connect(self.set_sg_window)
         #self.setSGDeg.clicked.connect(self.set_sg_degree)
+        self.msgn_k = 0.7
+        self.msgn_gamma = 3.2
+        self.msgn_g = 1
+        self.msgn_h = 0.7
         self.i = 0
         self.a = 1
         self.ix = 0
@@ -89,6 +101,9 @@ class Main(QMainWindow, Ui_MainWindow):
         self.set_zoom_coords = False
         self.sg_window = 5
         self.sg_degree = 3
+        self.kernel_width = 1
+        self.kernel_std = 1
+        self.kernel = 0
         self.fig1 = Figure()
         self.canvas = FigureCanvas(self.fig1)
         self.mplvl.addWidget(self.canvas)
@@ -267,7 +282,52 @@ class Main(QMainWindow, Ui_MainWindow):
                 self.rbtn9.setChecked(True)
                 main.refresh_norm()
 
-     
+    def set_msgn_k(self):
+        self.msgn_k = float(self.msgn_k_text.text())
+    
+    def set_msgn_gamma(self):
+        self.msgn_gamma = float(self.msgn_gamma_text.text())
+
+    def set_msgn_g(self):
+        self.msgn_g = float(self.msgn_g_text.text())
+
+    def set_msgn_h(self):
+        self.msgn_h = float(self.msgn_h_text.text())
+
+    def gaussian_kernel(self, normalized=False):
+        gaussian1D = signal.gaussian(self.kernel_width, self.kernel_std)
+        gaussian2D = np.outer(gaussian1D, gaussian1D)
+        if normalized:
+            gaussian2D /= (2*np.pi*(self.kernel_std**2))
+        self.kernel = gaussian2D
+
+    def msgn_single_image(self):
+        self.backup_cube = self.cube
+        image = self.cube[:,:,self.i]
+        main.gaussian_kernel()
+        local_mean = scipy.ndimage.filters.convolve(image,self.kernel)
+        difference = image - local_mean
+        square_diff = difference**2
+        local_std_image = np.sqrt(scipy.ndimage.filters.convolve(square_diff,self.kernel))
+        norm_image = (image - local_mean) / local_std_image
+        norm_image = np.arctan(self.msgn_k*norm_image)
+        return norm_image
+
+    def msgn_image_set(self):
+        w_set = [1,5,10,15,20,25,30,35,40]
+        image_set = []
+        for i in w_set:
+            self.kernel_width = i
+            image = main.msgn_single_image()
+            image_set.append(image)
+        image_0 = self.cube[:,:,self.i]
+        a_0 = np.min(image_0)
+        a_1 = np.max(image_0)
+        mean_local_norm = np.mean(image_set, axis=0)
+        gamma_transform = ((image_0 - a_0) / (a_1 - a_0))**(1.0 / self.msgn_gamma)
+        msgn_image = (self.msgn_h * gamma_transform) + ((1 - self.msgn_h) * self.msgn_g * mean_local_norm)
+        self.cube[:,:,self.i] = msgn_image
+        main.create_image(self.cube)
 
     def savitzky_golay(self, x, y):
         self.cube = savitzkygolay.filter3D(self.cube_base, self.sg_window, self.sg_degree)
@@ -309,13 +369,15 @@ class Main(QMainWindow, Ui_MainWindow):
             self.var_int = 10
             self.cube = self.stretch_val(self.cube_base)
             #self.norm = ImageNormalize(interval=self.interval, stretch=self.stretch_val, clip=True)
+        elif text == 'Sqrt Stretch':
+            self.cube = np.sqrt(self.cube)
         elif text == 'No Stretch':
             self.norm = None
             self.cube = self.cube_base
         else:
             self.var_max = 10
             self.var_int = 1
-            self.cube = self.stretch_val(self.cube_base)
+            self.cube = self.stretch_val(self.cube_base, clip=False)
             #self.norm = ImageNormalize(interval=self.interval, stretch=self.stretch_val, clip=True)
         main.create_image(self.cube)
 
