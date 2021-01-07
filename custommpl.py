@@ -282,6 +282,8 @@ class Main(QMainWindow, Ui_MainWindow):
                 self.rbtn9.setChecked(True)
                 main.refresh_norm()
 
+# The following four functions update the relevant global variables for MSGN
+
     def set_msgn_k(self):
         self.msgn_k = float(self.msgn_k_text.text())
     
@@ -294,12 +296,16 @@ class Main(QMainWindow, Ui_MainWindow):
     def set_msgn_h(self):
         self.msgn_h = float(self.msgn_h_text.text())
 
+# Creates a 2D gaussian kernel for the multi-scale gaussian normalization (MSGN) functions
+
     def gaussian_kernel(self, normalized=False):
         gaussian1D = signal.gaussian(self.kernel_width, self.kernel_std)
         gaussian2D = np.outer(gaussian1D, gaussian1D)
         if normalized:
             gaussian2D /= (2*np.pi*(self.kernel_std**2))
         self.kernel = gaussian2D
+
+# This is the majority of the steps taken in the MSGN algorithm (see Readme file for notes on this)
 
     def msgn_single_image(self):
         self.backup_cube = self.cube
@@ -312,6 +318,8 @@ class Main(QMainWindow, Ui_MainWindow):
         norm_image = (image - local_mean) / local_std_image
         norm_image = np.arctan(self.msgn_k*norm_image)
         return norm_image
+
+# The last steps of the MSGN algorithm. I'll be adding lines for use on multi-image datasets soon.
 
     def msgn_image_set(self):
         w_set = [1,5,10,15,20,25,30,35,40]
