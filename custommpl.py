@@ -8,6 +8,9 @@ from matplotlib.backends.backend_qt5agg import (
     FigureCanvasQTAgg as FigureCanvas, 
     NavigationToolbar2QT as NavigationToolbar)
 import sys
+import shutil
+import os
+import cv2
 from PyQt5 import QtGui, QtWidgets, QtCore
 import savitzkygolay
 import numpy as np
@@ -22,6 +25,9 @@ from scipy.signal import savgol_filter, medfilt
 from astropy.convolution import Gaussian2DKernel as astro_gaussian
 from astropy.convolution import convolve as astro_convolve
 from astropy.convolution import convolve_fft as astro_convolve_fft
+from PyQt5.QtWidgets import *
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
 
 # Connects the Qt UI file with this python file
 Ui_MainWindow, QMainWindow = loadUiType('window.ui')
@@ -73,6 +79,7 @@ class Main(QMainWindow, Ui_MainWindow):
         self.meantxt.returnPressed.connect(self.set_mean_window)
         self.sgwintxt.returnPressed.connect(self.set_sg_window)
         self.sgdegtxt.returnPressed.connect(self.set_sg_degree)
+        self.SGrunButton.clicked.connect(self.sg_run)
         self.rdiffCheck.stateChanged.connect(self.run_diff)
         self.divCheck.stateChanged.connect(self.cube_div)
         self.vmintxt.returnPressed.connect(self.set_vmin)
@@ -85,9 +92,11 @@ class Main(QMainWindow, Ui_MainWindow):
         self.msgn_gamma_text.returnPressed.connect(self.set_msgn_gamma)
         self.msgn_g_text.returnPressed.connect(self.set_msgn_g)
         self.msgn_h_text.returnPressed.connect(self.set_msgn_h)
-        self.msgn_single_imageButton.clicked.connect(self.msgn_single_image)
-        self.msgn_image_setButton.clicked.connect(self.msgn_image_set)
+        self.msgn_single_imageButton.clicked.connect(self.msgn_current_image)
+        self.msgn_image_setButton.clicked.connect(self.msgn_all_images)
         self.msgn_resetButton.clicked.connect(self.msgn_reset)
+        self.saveImageButton.clicked.connect(self.saveImage)
+        self.saveVideoButton.clicked.connect(self.save_movie)
         #self.kernelsButton.clicked.connect(self.show_kernels)
         #self.setSGWindow.returnPressed.connect(self.set_sg_window)
         #self.setSGDeg.clicked.connect(self.set_sg_degree)
@@ -95,6 +104,10 @@ class Main(QMainWindow, Ui_MainWindow):
         self.msgn_gamma = 3.2
         self.msgn_g = 1
         self.msgn_h = 0.7
+        self.msgn_k_text.setText(str(self.msgn_k))
+        self.msgn_gamma_text.setText(str(self.msgn_gamma))
+        self.msgn_g_text.setText(str(self.msgn_g))
+        self.msgn_h_text.setText(str(self.msgn_h))
         self.w_set = []
         self.i = 0
         self.a = 1
@@ -102,13 +115,18 @@ class Main(QMainWindow, Ui_MainWindow):
         self.iy = 0
         self.norm = None
         self.interval = None
+        self.cube_base_on = False
+        self.cube_filter_on = False
+        self.cube_norm_on = False
         self.dates = []
         self.coords = []
         self.zoom_coords = []
         self.save_coords = False
         self.set_zoom_coords = False
-        self.sg_window = 5
-        self.sg_degree = 3
+        self.sg_window = 9
+        self.sg_degree = 5
+        self.sgwintxt.setText(str(self.sg_window))
+        self.sgdegtxt.setText(str(self.sg_degree))
         self.kernel_width = 1
         self.kernel_std = 1
         self.kernel = 0
@@ -217,7 +235,7 @@ class Main(QMainWindow, Ui_MainWindow):
             self.axf1.grid(b=True)
         else:
             self.axf1.grid(b=False)
-        main.create_image(self.cube)
+        main.create_image(self.cube_display)
 
     def run_diff(self, state):
         if state == Qt.Checked:
@@ -241,12 +259,12 @@ class Main(QMainWindow, Ui_MainWindow):
 
     def set_sg_window(self):
         self.sg_window = int(self.sgwintxt.text())
-        main.savitzky_golay(self.sg_window, self.sg_degree)
+        #main.savitzky_golay(self.sg_window, self.sg_degree)
         self.sgwintxt.clearFocus()
 
     def set_sg_degree(self):
         self.sg_degree = int(self.sgdegtxt.text())
-        main.savitzky_golay(self.sg_window, self.sg_degree)
+        #main.savitzky_golay(self.sg_window, self.sg_degree)
         self.sgdegtxt.clearFocus()
     
     def set_mean_window(self):
@@ -326,8 +344,16 @@ class Main(QMainWindow, Ui_MainWindow):
 
 # This is the majority of the steps taken in the MSGN algorithm (see Readme file for notes on this)
 
-    def msgn_single_image(self):
-        image = self.cube[:,:,self.i]
+    def msgn_single_image(self,i):
+        if self.cube_base_on == True:
+            image = self.cube_base[:,:,i]
+            print('base on')
+        elif self.cube_norm_on == True:
+            image = self.cube_norm[:,:,i]
+            print('norm on')
+        elif self.cube_filter_on == True:
+            image = self.cube_base[:,:,i]
+            print('filter on')
         main.gaussian_kernel()
         local_mean = astro_convolve_fft(image,self.kernel)
 #        local_mean = scipy.ndimage.filters.convolve(image,self.kernel)
@@ -340,15 +366,16 @@ class Main(QMainWindow, Ui_MainWindow):
         return norm_image
 
 # The last steps of the MSGN algorithm. I'll be adding lines for use on multi-image datasets soon.
-    def msgn_image_set(self):
+    def msgn_image_set(self,i):
 #        image_set = []
+        #self.cube_filter = np.zeros((self.cube_x,self.cube_y,self.n))
         n_set = len(self.w_set)
         image_set = np.zeros((self.cube_x,self.cube_y,n_set))
-        for i in range(n_set):
-            self.kernel_width = self.w_set[i]
+        for j in range(n_set):
+            self.kernel_width = self.w_set[j]
             print(self.kernel_width)
-            image = main.msgn_single_image()
-            image_set[:,:,i] = image
+            image = main.msgn_single_image(i)
+            image_set[:,:,j] = image
 
 
  #       for i in w_set:
@@ -356,32 +383,76 @@ class Main(QMainWindow, Ui_MainWindow):
  #           print(self.kernel_width)
  #           image = main.msgn_single_image()
  #           image_set.append(image)
-        image_0 = self.cube[:,:,self.i]
-        a_0 = np.min(self.cube)
-        a_1 = np.max(self.cube)
+        if self.cube_base_on == True:
+            image_0 = self.cube_base[:,:,i]
+            a_0 = np.min(self.cube_base)
+            a_1 = np.max(self.cube_base)
+            print('Base on')
+        elif self.cube_norm_on == True:
+            image_0 = self.cube_norm[:,:,i]
+            a_0 = np.min(self.cube_norm)
+            a_1 = np.max(self.cube_norm)
+            print('Norm on')
+        elif self.cube_filter_on == True:
+            image_0 = self.cube_base[:,:,i]
+            a_0 = np.min(self.cube_base)
+            a_1 = np.max(self.cube_base)
+            print('Filter on')
         mean_local_norm = np.mean(image_set,axis=2)
         print(mean_local_norm.shape)
         gamma_transform = ((image_0 - a_0) / (a_1 - a_0))**(1.0 / self.msgn_gamma)
         msgn_image = (self.msgn_h * gamma_transform) + ((1 - self.msgn_h) * self.msgn_g * mean_local_norm)
-        self.cube[:,:,self.i] = msgn_image
-        main.create_image(self.cube)
+        self.cube_filter[:,:,i] = msgn_image
+        #self.cube_display = self.cube_filter
+        #main.create_image(self.cube_display)
+
+    def msgn_all_images(self):
+        self.cube_filter = np.zeros((self.cube_x,self.cube_y,self.n))
+        for i in range(self.n):
+            main.msgn_image_set(i)
+            print(i)
+        self.cube_display = self.cube_filter
+        main.create_image(self.cube_display)
+
+    def msgn_current_image(self):
+        self.cube_filter = np.zeros((self.cube_x,self.cube_y,self.n))
+        main.msgn_image_set(self.i)
+        self.cube_display = self.cube_filter
+        main.create_image(self.cube_display)
+
 
     def msgn_reset(self):
-        self.cube = self.make_cube(self.files)
-#        self.cube = self.cube[725:825,950:1280,:]
-        main.create_image(self.cube)
+        if self.cube_norm_on == True:
+            self.cube_display = self.cube_norm
+            print('Norm on')
+        else:
+            self.cube_display = self.cube_base
+            print('Base on')
+        #self.cube_display = self.cube_base2
+        #self.cube_base = self.cube_base2
+        main.create_image(self.cube_display)
+        
+
+    def sg_run(self):
+        main.savitzky_golay(self.sg_window, self.sg_degree)
 
     def savitzky_golay(self, x, y):
-        self.cube = savitzkygolay.filter3D(self.cube_base, self.sg_window, self.sg_degree)
-        main.create_image(self.cube)
+        print(self.sg_window)
+        print(self.sg_degree)
+        self.cube_norm = savitzkygolay.filter3D(self.cube_base, self.sg_window, self.sg_degree)
+        self.cube_display = self.cube_norm
+        self.cube_norm_on = True
+        self.cube_base_on = False
+        self.cube_filter_on = False
+        print(self.cube_norm_on)
+        main.create_image(self.cube_display)
 
     def median_filter(self):
         self.cube = medfilt(self.cube_base)
         main.create_image(self.cube)
 
     def no_filter(self):
-        self.cube = self.cube_base
-        main.create_image(self.cube)
+        main.create_image(self.cube_base)
 
     def cube_mean(self, window):
         n = self.cube.shape[2]
@@ -429,7 +500,7 @@ class Main(QMainWindow, Ui_MainWindow):
             self.i = 0
         else:
             self.i = self.i - 1
-        main.create_image(self.cube)
+        main.create_image(self.cube_display)
 
 # Displays next image in set. Can be used with key event or button.
     def next(self):
@@ -437,7 +508,7 @@ class Main(QMainWindow, Ui_MainWindow):
             self.i = self.n - 1
         else:
             self.i = self.i + 1
-        main.create_image(self.cube)
+        main.create_image(self.cube_display)
 
     def figure_coords(self,event):
         self.ix = event.xdata
@@ -448,7 +519,7 @@ class Main(QMainWindow, Ui_MainWindow):
             self.zoom_coords.append([round(self.ix),round(self.iy)])
             if len(self.zoom_coords) == 2:
                 main.zoom()
-        pix_value = self.cube[round(self.iy),round(self.ix),self.i]
+        pix_value = self.cube_display[round(self.iy),round(self.ix),self.i]
         self.lcdVal.display(pix_value)
         self.lcdX.display(self.ix)
         self.lcdY.display(self.iy)
@@ -469,27 +540,27 @@ class Main(QMainWindow, Ui_MainWindow):
         return dataz
 
     def zoom(self):
-        self.backup_cube = self.cube
+        self.backup_cube = self.cube_display
         self.hdu_backup = self.hdu
         self.wcs_backup = self.wcs
         x1,x2 = self.zoom_coords[0][0], self.zoom_coords[1][0]
         y1,y2 = self.zoom_coords[0][1], self.zoom_coords[1][1]
-        self.cube = self.cube[y2:y1,x1:x2,:]
+        self.cube_display = self.cube_display[y2:y1,x1:x2,:]
         #pos_x = abs(x2-x1)/2.0
         #pos_y = abs(y2-y1)/2.0
         #cutout = Cutout2D(self.cube, position = (pos_x,pos_y), size = (abs(x2-x1),abs(y2-y1)), wcs=self.wcs)
         #self.hdu.header.update(cutout.wcs.to_header())
         #self.wcs = WCS(self.hdu.header)
         #self.axf1 = self.canvas.figure.subplots(ncols=1,nrows=1, subplot_kw={'projection': self.wcs})
-        main.create_image(self.cube)
+        main.create_image(self.cube_display)
 
     def undo_zoom(self):
-        self.cube = self.backup_cube
+        self.cube_display = self.backup_cube
         self.zoom_coords = []
         #self.hdu = self.hdu_backup
         #self.wcs = self.wcs_backup
         #self.axf1 = self.canvas.figure.subplots(ncols=1,nrows=1, subplot_kw={'projection': self.wcs})
-        main.create_image(self.cube)
+        main.create_image(self.cube_display)
 
     def zoom_state(self, checked):
         if checked:
@@ -497,13 +568,44 @@ class Main(QMainWindow, Ui_MainWindow):
         else:
             self.set_zoom_coords = False
 
+    def save_movie(self):
+        cwd = os.getcwd()
+        images_folder = os.path.join(cwd,'movie_temp')
+        os.makedirs(images_folder)
+        for i in range(self.n):
+            date = self.dates[i]
+            self.view_image.set_norm(self.norm)
+            self.image = self.cube_display[:,:,i]
+            imageMin = np.amin(self.image)
+            imageMax = np.amax(self.image)
+            self.view_image.set_data(self.image)
+            self.axf1.set_title(date)
+            self.fig1.canvas.draw_idle()
+            self.lcdMin.display(imageMin)
+            self.lcdMax.display(imageMax)
+            image_name = 'image'+str(i)+'.png'
+            file_name = os.path.join(images_folder,image_name)
+            self.fig1.canvas.figure.savefig(file_name)
+        file_path = QFileDialog.getSaveFileName(self,"Save Video","","Video (*.mp4)")
+        video_name = file_path[0].rsplit('/',1)[1]
+        images = [img for img in os.listdir(images_folder) if img.endswith (".png")]
+        frame = cv2.imread(os.path.join(images_folder, images[0]))
+        height,width,layers = frame.shape
+        video = cv2.VideoWriter(video_name, 0, 1, (width,height))
+        for image in images:
+            video.write(cv2.imread(os.path.join(images_folder, image)))
+        cv2.destroyAllWindows()
+        video.release()
+
+
+
 
 # Creates individual image to be displayed and generates
 # accompanying date from header
     def create_image(self,cube):
         date = self.dates[self.i]
         self.view_image.set_norm(self.norm)
-        self.image = self.cube[:,:,self.i]
+        self.image = cube[:,:,self.i]
         imageMin = np.amin(self.image)
         imageMax = np.amax(self.image)
         self.view_image.set_data(self.image)
@@ -513,7 +615,7 @@ class Main(QMainWindow, Ui_MainWindow):
         self.lcdMax.display(imageMax)
 
     def restart(self):
-        self.cube = self.cube_base
+        self.cube_display = self.cube_base
         self.norm = None
         self.interval = None
         self.i = 0
@@ -529,7 +631,14 @@ class Main(QMainWindow, Ui_MainWindow):
         self.vmaxtxt.clear()
         self.percentlowtxt.clear()
         self.percenthightxt.clear()
-        main.create_image(self.cube)
+        main.create_image(self.cube_display)
+
+    def saveImage(self):
+        file_path = QFileDialog.getSaveFileName(self,"Save Image","","Images (*.png *jpg *.tiff)")
+        if file_path == "":
+            return
+        print(file_path)
+        self.fig1.canvas.figure.savefig(file_path[0])
 
 # Connected with Open button, creates interactive dialog box for user to select
 # files to be given to the make_cube function
@@ -540,15 +649,17 @@ class Main(QMainWindow, Ui_MainWindow):
         self.hdu = fits.open(self.files[0])[0]
         self.wcs = WCS(self.hdu.header)
         self.axf1 = self.canvas.figure.subplots(ncols=1,nrows=1, subplot_kw={'projection': self.wcs})
-        self.cube = main.make_cube(self.files)
-        self.cube_x = self.cube.shape[0]
-        self.cube_y = self.cube.shape[1]
-        self.cube_n = self.cube.shape[2]
-#        self.cube = self.cube[725:825,950:1280,:]
         self.cube_base = main.make_cube(self.files)
-        self.n = self.cube.shape[2]
+        self.cube_display = self.cube_base
+        self.cube_base2 = main.make_cube(self.files)
+        self.cube_x = self.cube_base.shape[0]
+        self.cube_y = self.cube_base.shape[1]
+        self.cube_n = self.cube_base.shape[2]
+#        self.cube = self.cube[725:825,950:1280,:]
+        self.n = self.cube_base.shape[2]
         self.i = 0
-        self.image = self.cube[:,:,0]
+        self.cube_base_on = True
+        self.image = self.cube_display[:,:,0]
         self.view_image = self.axf1.imshow(self.image, cmap='gray')
         self.fig1.canvas.draw_idle()
     
